@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
-import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
+import {Deployers} from "./Deployers.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {PoolManager} from "v4-core/PoolManager.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
@@ -25,7 +25,7 @@ contract TestGasPriceFeesHook is Test, Deployers {
         deployFreshManagerAndRouters();
 
         // Deploy, mint tokens, and approve all periphery contracts for two tokens
-        deployMintAndApprove2Currencies();
+        (currency0, currency1) = deployMintAndApprove2Currencies(18, 18);
 
         // Deploy our hook with the proper flags
         address hookAddress =
@@ -33,7 +33,7 @@ contract TestGasPriceFeesHook is Test, Deployers {
 
         // Set gas price = 10 gwei and deploy our hook
         vm.txGasPrice(10 gwei);
-        deployCodeTo("GasPriceFeesHook.sol", abi.encode(manager), hookAddress);
+        deployCodeTo("GasPriceFeesHook.sol", abi.encode(poolManager), hookAddress);
         hook = GasPriceFeesHook(hookAddress);
 
         // Initialize a pool

@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
 
-import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
+import {Deployers} from "./Deployers.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 
@@ -25,12 +25,6 @@ import "forge-std/console.sol";
 import {PointsHook} from "../src/PointsHook.sol";
 
 contract TestPointsHook is Test, Deployers, ERC1155TokenReceiver {
-    MockERC20 token; // our token to use in the ETH-TOKEN pool
-
-    // Native tokens are represented by address(0)
-    Currency ethCurrency = Currency.wrap(address(0));
-    Currency tokenCurrency;
-
     PointsHook hook;
 
     function setUp() public {
@@ -39,29 +33,19 @@ contract TestPointsHook is Test, Deployers, ERC1155TokenReceiver {
         deployFreshManagerAndRouters();
 
         // Deploy our TOKEN contract
-        token = new MockERC20("Test Token", "TEST", 18);
-        tokenCurrency = Currency.wrap(address(token));
-
-        // Mint a bunch of TOKEN to ourselves and to address(1)
-        token.mint(address(this), 1000 ether);
-        token.mint(address(1), 1000 ether);
+        currency0 = deployMintAndApproveCurrency(18);
 
         // Deploy hook to an address that has the proper flags set
         uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
-        deployCodeTo("PointsHook.sol", abi.encode(manager), address(flags));
+        deployCodeTo("PointsHook.sol", abi.encode(poolManager), address(flags));
 
         // Deploy our hook
         hook = PointsHook(address(flags));
 
-        // Approve our TOKEN for spending on the swap router and modify liquidity router
-        // These variables are coming from the `Deployers` contract
-        token.approve(address(swapRouter), type(uint256).max);
-        token.approve(address(modifyLiquidityRouter), type(uint256).max);
-
         // Initialize a pool
         (key,) = initPool(
             ethCurrency, // Currency 0 = ETH
-            tokenCurrency, // Currency 1 = TOKEN
+            currency0, // Currency 1 = TOKEN
             hook, // Hook Contract
             3000, // Swap Fees
             SQRT_PRICE_1_1 // Initial Sqrt(P) value = 1

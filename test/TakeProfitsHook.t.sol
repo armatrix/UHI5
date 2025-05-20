@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 // Foundry libraries
 import {Test} from "forge-std/Test.sol";
 
-import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
+import {Deployers} from "./Deployers.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
@@ -27,10 +27,6 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
     // Use the libraries
     using StateLibrary for IPoolManager;
 
-    // The two currencies (tokens) from the pool
-    Currency token0;
-    Currency token1;
-
     TakeProfitsHook hook;
 
     function setUp() public {
@@ -38,20 +34,20 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         deployFreshManagerAndRouters();
 
         // Deploy two test tokens
-        (token0, token1) = deployMintAndApprove2Currencies();
+        (currency0, currency1) = deployMintAndApprove2Currencies(18, 18);
 
         // Deploy our hook
         uint160 flags = uint160(Hooks.AFTER_INITIALIZE_FLAG | Hooks.AFTER_SWAP_FLAG);
         address hookAddress = address(flags);
-        deployCodeTo("TakeProfitsHook.sol", abi.encode(manager, ""), hookAddress);
+        deployCodeTo("TakeProfitsHook.sol", abi.encode(poolManager, ""), hookAddress);
         hook = TakeProfitsHook(hookAddress);
 
-        // Approve our hook address to spend these tokens as well
-        MockERC20(Currency.unwrap(token0)).approve(address(hook), type(uint256).max);
-        MockERC20(Currency.unwrap(token1)).approve(address(hook), type(uint256).max);
+        // Approve tokens for the hook contract
+        MockERC20(Currency.unwrap(currency0)).approve(address(hook), type(uint256).max);
+        MockERC20(Currency.unwrap(currency1)).approve(address(hook), type(uint256).max);
 
         // Initialize a pool with these two tokens
-        (key,) = initPool(token0, token1, hook, 3000, SQRT_PRICE_1_1);
+        (key,) = initPool(currency0, currency1, hook, 3000, SQRT_PRICE_1_1);
 
         // Add initial liquidity to the pool
 
@@ -89,13 +85,13 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         bool zeroForOne = true;
 
         // Note the original balance of token0 we have
-        uint256 originalBalance = token0.balanceOfSelf();
+        uint256 originalBalance = currency0.balanceOfSelf();
 
         // Place the order
         int24 tickLower = hook.placeOrder(key, tick, zeroForOne, amount);
 
         // Note the new balance of token0 we have
-        uint256 newBalance = token0.balanceOfSelf();
+        uint256 newBalance = currency0.balanceOfSelf();
 
         // Since we deployed the pool contract with tick spacing = 60
         // i.e. the tick can only be a multiple of 60
@@ -121,9 +117,9 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         uint256 amount = 10e18;
         bool zeroForOne = true;
 
-        uint256 originalBalance = token0.balanceOfSelf();
+        uint256 originalBalance = currency0.balanceOfSelf();
         int24 tickLower = hook.placeOrder(key, tick, zeroForOne, amount);
-        uint256 newBalance = token0.balanceOfSelf();
+        uint256 newBalance = currency0.balanceOfSelf();
 
         assertEq(tickLower, 60);
         assertEq(originalBalance - newBalance, amount);
@@ -137,7 +133,7 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         hook.cancelOrder(key, tickLower, zeroForOne, amount);
 
         // Check that we received our token0 tokens back, and no longer own any ERC-1155 tokens
-        uint256 finalBalance = token0.balanceOfSelf();
+        uint256 finalBalance = currency0.balanceOfSelf();
         assertEq(finalBalance, originalBalance);
 
         tokenBalance = hook.balanceOf(address(this), orderId);
@@ -174,13 +170,13 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         // Check that the hook contract has the expected number of token1 tokens ready to redeem
         uint256 orderId = hook.getOrderId(key, tickLower, zeroForOne);
         uint256 claimableOutputTokens = hook.claimableOutputTokens(orderId);
-        uint256 hookContractToken1Balance = token1.balanceOf(address(hook));
+        uint256 hookContractToken1Balance = currency1.balanceOf(address(hook));
         assertEq(claimableOutputTokens, hookContractToken1Balance);
 
         // Ensure we can redeem the token1 tokens
-        uint256 originalToken1Balance = token1.balanceOf(address(this));
+        uint256 originalToken1Balance = currency1.balanceOf(address(this));
         hook.redeem(key, tick, zeroForOne, amount);
-        uint256 newToken1Balance = token1.balanceOf(address(this));
+        uint256 newToken1Balance = currency1.balanceOf(address(this));
 
         assertEq(newToken1Balance - originalToken1Balance, claimableOutputTokens);
     }
@@ -210,13 +206,13 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         // Check that the hook contract has the expected number of token0 tokens ready to redeem
         uint256 orderId = hook.getOrderId(key, tickLower, zeroForOne);
         uint256 claimableOutputTokens = hook.claimableOutputTokens(orderId);
-        uint256 hookContractToken0Balance = token0.balanceOf(address(hook));
+        uint256 hookContractToken0Balance = currency0.balanceOf(address(hook));
         assertEq(claimableOutputTokens, hookContractToken0Balance);
 
         // Ensure we can redeem the token0 tokens
-        uint256 originalToken0Balance = token0.balanceOfSelf();
+        uint256 originalToken0Balance = currency0.balanceOfSelf();
         hook.redeem(key, tick, zeroForOne, amount);
-        uint256 newToken0Balance = token0.balanceOfSelf();
+        uint256 newToken0Balance = currency0.balanceOfSelf();
 
         assertEq(newToken0Balance - originalToken0Balance, claimableOutputTokens);
     }
@@ -231,7 +227,7 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         hook.placeOrder(key, 0, true, amount);
         hook.placeOrder(key, 60, true, amount);
 
-        (, int24 currentTick,,) = manager.getSlot0(key.toId());
+        (, int24 currentTick,,) = poolManager.getSlot0(key.toId());
         assertEq(currentTick, 0);
 
         // Do a swap to make tick increase beyond 60

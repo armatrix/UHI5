@@ -38,11 +38,11 @@ contract PointsHook is BaseHook, ERC1155 {
         });
     }
 
-    // Implement the ERC1155 `uri` function
     function uri(uint256) public view virtual override returns (string memory) {
         return "https://api.example.com/token/{id}";
     }
 
+ 
     function _afterSwap(
         address,
         PoolKey calldata key,
