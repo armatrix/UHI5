@@ -9,4 +9,8 @@ optimizer_runs = 800
 via_ir = false
 ffi = true
 
+[rpc_endpoints]
+sepolia = "https://ethereum-sepolia-rpc.publicnode.com/"
+op_sepolia = "https://sepolia.optimism.io"
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
